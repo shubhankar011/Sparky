@@ -53,7 +53,7 @@ def recognize():
             print(f"\nCould not request results from the service; {e}")
     return text
 
-os.environ['GROQ_API_KEY'] = "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"
+os.environ['GROQ_API_KEY'] = "API_KEY"
 Client = Groq()
 
 while True:
