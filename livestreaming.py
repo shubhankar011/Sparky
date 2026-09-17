@@ -100,7 +100,7 @@ def recognize_face(face_crop):
                 0,
                 100 - best_distance * 5
             )
-
+            
             return best_name, confidence
 
         return "Unknown", 0
