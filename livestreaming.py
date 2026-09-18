@@ -39,10 +39,7 @@ with open("faces/face_db.pkl", "rb") as f:
 
 print("Everything loaded.")
 
-
-# =========================
 # CAMERA
-# =========================
 
 cap = cv2.VideoCapture(0)
 
