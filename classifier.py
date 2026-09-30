@@ -2,7 +2,7 @@ from sentence_transformers import SentenceTransformer
 import json
 import numpy as np
 import commands
-import sparky_SystemPrompt
+import sparky_SystemPrompt as sparky
 
 # Load model
 model = SentenceTransformer("./models/all-MiniLM-L6-v2")
