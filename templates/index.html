@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Sparky Vision</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <header>
+        <div class="brand">
+            <div class="logo">S</div>
+
+            <div>
+                <h1>Sparky</h1>
+                <span>VISION SYSTEM</span>
+            </div>
+        </div>
+
+        <div class="status">
+            <span class="dot"></span>
+            <span>CAMERA ONLINE</span>
+        </div>
+    </header>
+
+
+    <main>
+
+        <section class="hero">
+            <div>
+                <p class="eyebrow">LIVE CAMERA</p>
+                <h2>Visual Monitoring</h2>
+                <p class="description">
+                    Real-time webcam stream powered by Sparky.
+                </p>
+            </div>
+
+            <div class="connection">
+                <span>●</span> CONNECTED
+            </div>
+        </section>
+
+
+        <section class="camera-card">
+
+            <div class="camera-header">
+                <div>
+                    <span class="live-indicator"></span>
+                    LIVE
+                </div>
+
+                <div id="clock">--:--:--</div>
+            </div>
+
+
+            <div class="video-container">
+
+                <img
+                    id="camera"
+                    src="{{ url_for('video_feed') }}"
+                    alt="Sparky Camera Feed"
+                >
+
+                <div class="camera-overlay">
+                    <div>SPARKY VISION</div>
+                    <div id="resolution">LIVE FEED</div>
+                </div>
+
+            </div>
+
+
+            <div class="camera-footer">
+
+                <div class="info">
+                    <span class="label">SOURCE</span>
+                    <span>WEBCAM</span>
+                </div>
+
+                <div class="info">
+                    <span class="label">STREAM</span>
+                    <span>MJPEG</span>
+                </div>
+
+                <div class="info">
+                    <span class="label">STATUS</span>
+                    <span class="online">ACTIVE</span>
+                </div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <footer>
+        SPARKY AI SYSTEM <span>•</span> LOCAL NETWORK
+    </footer>
+
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
