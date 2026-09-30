@@ -1,5 +1,5 @@
 import json
-import sparky
+import sparky_SystemPrompt as sparky
 import live_snap
 import serial, time
 # livestr.start_vision_thread()
