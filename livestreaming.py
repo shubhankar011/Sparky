@@ -1,323 +1,251 @@
 import cv2
-import numpy as np
-import pickle
-from deepface import DeepFace
 from ultralytics import YOLO
+from deepface import DeepFace
+import os
+import threading
+import math
 
+thread_lock = threading.Lock()
 
-# SETTINGS
-
-PERSON_CONFIDENCE = 0.5
-DISTANCE_THRESHOLD = 10
-
-''' How close a new detection must be to
-an existing person to be considered
-the same person.'''
-MATCH_DISTANCE = 120
-
-'''Number of frames before an unseen
-person is removed from cache.'''
-MAX_MISSING_FRAMES = 15
-
-
-# LOAD MODELS
-
-print("Loading YOLO...")
-yolo = YOLO("yolo11n.pt")
-
-print("Loading face detector...")
-
+model = YOLO('yolo11n.pt')
+yolo_detectors = list(range(1,80))
+cap = cv2.VideoCapture(0)
 face_detector = cv2.CascadeClassifier(
-    cv2.data.haarcascades +
-    "haarcascade_frontalface_default.xml"
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
 )
 
-print("Loading face database...")
+face_details_cache = {}     # face_id -> "MALE 25"
+face_names_cache = {}       # face_id -> "John"
+analyzing_ids = set()       # face_ids currently running a background thread
+last_analyzed_frame = {}    # face_id -> frame_counter value at last analysis
 
-with open("faces/face_db.pkl", "rb") as f:
-    database = pickle.load(f)
+RUN_INTERVAL = 60
+frame_counter = 0
 
-print("Everything loaded.")
-
-# CAMERA
-
-cap = cv2.VideoCapture(0)
-
-if not cap.isOpened():
-    print("Could not open camera.")
-    exit()
-
-
-# PERSON CACHE
-
-people = {}
-
-next_id = 0
+# --- simple centroid tracker: gives each physical face a stable id ---
+next_face_id = 0
+tracked_faces = {}   # face_id -> (cx, cy) from the previous frame
+MAX_DISTANCE = 120    # px — tune to your resolution/how fast people move
+current_objects = set()
+current_people = []
 
 
-# FACE RECOGNITION
+def get_seen_objects():
+    with thread_lock:
+        return list(current_objects)
 
-def recognize_face(face_crop):
 
+def get_seen_people():
+    with thread_lock:
+        return list(current_people)
+
+def match_faces(detections):
+    """
+    Matches this frame's raw detections to last frame's tracked centroids
+    by nearest distance, so the same physical face keeps the same id.
+    New faces (or ones that moved too far) get a fresh id.
+    """
+    global next_face_id, tracked_faces
+
+    new_tracked = {}
+    results = []
+    used_ids = set()
+
+    for (x, y, w, h) in detections:
+        cx, cy = x + w / 2, y + h / 2
+
+        best_id, best_dist = None, MAX_DISTANCE
+        for fid, (px, py) in tracked_faces.items():
+            if fid in used_ids:
+                continue
+            dist = math.hypot(cx - px, cy - py)
+            if dist < best_dist:
+                best_dist, best_id = dist, fid
+
+        if best_id is None:
+            best_id = next_face_id
+            next_face_id += 1
+
+        used_ids.add(best_id)
+        new_tracked[best_id] = (cx, cy)
+        results.append((best_id, (x, y, w, h)))
+
+    tracked_faces = new_tracked
+    return results
+
+
+def find(face_crop, face_id):
     try:
-
-        result = DeepFace.represent(
-            img_path=face_crop,
-            model_name="ArcFace",
-            detector_backend="skip",
-            enforce_detection=False
-        )
-
-        embedding = np.array(
-            result[0]["embedding"]
-        )
-
-        best_name = "Unknown"
-        best_distance = float("inf")
-
-        for name, stored_embedding in database.items():
-
-            stored_embedding = np.array(
-                stored_embedding
-            )
-
-            distance = np.linalg.norm(
-                embedding - stored_embedding
-            )
-
-            if distance < best_distance:
-
-                best_distance = distance
-                best_name = name
-
-
-        if best_distance < DISTANCE_THRESHOLD:
-
-            confidence = max(
-                0,
-                100 - best_distance * 5
-            )
-            
-            return best_name, confidence
-
-        return "Unknown", 0
-
-
+        dfs = DeepFace.find(face_crop, "faces", enforce_detection=False, silent=True)
+        name = "Unknown"
+        if len(dfs) > 0 and not dfs[0].empty:
+            path = dfs[0]["identity"].iloc[0]
+            name = os.path.basename(path).split(".")[0]
+        with thread_lock:
+            face_names_cache[face_id] = name
     except Exception as e:
-
-        print("DeepFace error:", e)
-
-        return "Unknown", 0
-
-# MAIN LOOP
-
-while True:
-
-    ret, frame = cap.read()
-
-    if not ret:
-        break
+        print(e)
+        with thread_lock:
+            face_names_cache[face_id] = "Unknown"
+    print(f"Face done...{face_id}")
+    with thread_lock:
+        analyzing_ids.discard(face_id)
 
 
-    # YOLO
+def profiles(face_crop, face_id):
+    try:
+        analysis = DeepFace.analyze(
+            face_crop, actions=["age", "gender"], enforce_detection=False, silent=True
+        )
+        face_data = analysis[0] if isinstance(analysis, list) else analysis
+        gender = "MALE" if face_data["dominant_gender"] == "Man" else "FEMALE"
+        age = int(face_data["age"])
+        with thread_lock:
+            face_details_cache[face_id] = f"{gender} {age}"
+    except Exception as e:
+        print(e)
+        with thread_lock:
+            face_details_cache[face_id] = "Unknown"
+    print(f"Profile done...{face_id}")
+    find(face_crop, face_id)
 
-    results = yolo(
-        frame,
-        verbose=False,
-        classes=[0]
-    )
+    '''
+    Below code use only when in face this code is removed
+    with thread_lock:
+        analyzing_ids.discard(face_id)'''
 
 
-    detections = []
-    for box in results[0].boxes:
-        confidence = float(box.conf[0])
-        if confidence < PERSON_CONFIDENCE:
-            continue
+def run_vision():
+    global frame_counter
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        frame_counter += 1
 
-        x1, y1, x2, y2 = map(
-            int,
-            box.xyxy[0]
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        detections = face_detector.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(100, 100),
+            flags=cv2.CASCADE_SCALE_IMAGE,
         )
 
-        center = (
-            (x1 + x2) // 2,
-            (y1 + y2) // 2
+        faces = match_faces(detections)
+        # print(faces)
+        seen_ids = {fid for fid, _ in faces}
+        result = model(frame,classes=yolo_detectors,verbose=False)
+        # print(seen_ids)
+        # drop cached data for ids that left the frame, so they don't linger
+        # or get reused on a different face later
+        with thread_lock:
+            for fid in list(face_names_cache.keys()):
+                if fid not in seen_ids:
+                    face_names_cache.pop(fid, None)
+                    face_details_cache.pop(fid, None)
+                    last_analyzed_frame.pop(fid, None)
+
+        for face_id, (x, y, w, h) in faces:
+            face_crop = frame[y:y + h, x:x + w]
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            if face_crop.size == 0:
+                continue
+
+            with thread_lock:
+                current_name = face_names_cache.get(face_id, "Analyzing...")
+                current_text = face_details_cache.get(face_id, "Analyzing...")
+                already_running = face_id in analyzing_ids
+
+            due = (frame_counter - last_analyzed_frame.get(face_id, -RUN_INTERVAL)) >= RUN_INTERVAL
+
+            if not already_running and due:
+                with thread_lock:
+                    analyzing_ids.add(face_id)
+                last_analyzed_frame[face_id] = frame_counter
+                crop_copy = face_crop.copy()
+                threading.Thread(target=find, args=(crop_copy, face_id), daemon=True).start()
+
+            cv2.putText(frame, current_name, (x, y - 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
+            # cv2.putText(frame, current_text, (x, y - 10), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 25, 80), 2)
+
+        cv2.imshow("Sparky Vision", result[0].plot())
+        if cv2.waitKey(1) & 0xff == ord("q"):
+            break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+def run_vision_web():
+    global frame_counter
+    while True:
+        ok, frame = cap.read()
+        if not ok:
+            break
+        frame_counter += 1
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        detections = face_detector.detectMultiScale(
+            gray,
+            scaleFactor=1.1,
+            minNeighbors=5,
+            minSize=(100, 100),
+            flags=cv2.CASCADE_SCALE_IMAGE,
         )
 
-        detections.append(
-            (x1, y1, x2, y2, center)
+        faces = match_faces(detections)
+        # print(faces)
+        seen_ids = {fid for fid, _ in faces}
+        result = model(frame,classes=yolo_detectors,verbose=False)
+        # print(seen_ids)
+        # drop cached data for ids that left the frame, so they don't linger
+        # or get reused on a different face later
+        with thread_lock:
+            for fid in list(face_names_cache.keys()):
+                if fid not in seen_ids:
+                    face_names_cache.pop(fid, None)
+                    face_details_cache.pop(fid, None)
+                    last_analyzed_frame.pop(fid, None)
+
+        for face_id, (x, y, w, h) in faces:
+            face_crop = frame[y:y + h, x:x + w]
+            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+            if face_crop.size == 0:
+                continue
+
+            with thread_lock:
+                current_name = face_names_cache.get(face_id, "Analyzing...")
+                current_text = face_details_cache.get(face_id, "Analyzing...")
+                already_running = face_id in analyzing_ids
+
+            due = (frame_counter - last_analyzed_frame.get(face_id, -RUN_INTERVAL)) >= RUN_INTERVAL
+
+            if not already_running and due:
+                with thread_lock:
+                    analyzing_ids.add(face_id)
+                last_analyzed_frame[face_id] = frame_counter
+                crop_copy = face_crop.copy()
+                threading.Thread(target=find, args=(crop_copy, face_id), daemon=True).start()
+
+            cv2.putText(frame, current_name, (x, y - 50), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
+            # cv2.putText(frame, current_text, (x, y - 10), cv2.FONT_HERSHEY_COMPLEX, 0.5, (0, 25, 80), 2)
+
+        _, buffer = cv2.imencode(".jpg", result[0].plot())
+
+        yield (
+            b"--frame\r\n"
+            b"Content-Type: image/jpeg\r\n\r\n"
+            + buffer.tobytes() +
+            b"\r\n"
         )
 
-    # KEEP TRACK OF PEOPLE
+    cap.release()
+    cv2.destroyAllWindows()
 
-    current_ids = set()
-
-    for x1, y1, x2, y2, center in detections:
-
-        cx, cy = center
-
-        matched_id = None
-
-        smallest_distance = float("inf")
-
-        # FIND EXISTING PERSON
-        for pid, data in people.items():
-
-            old_cx, old_cy = data["center"]
-
-            distance = np.sqrt(
-                (cx - old_cx) ** 2 +
-                (cy - old_cy) ** 2
-            )
-
-
-            if (
-                distance < MATCH_DISTANCE
-                and distance < smallest_distance
-            ):
-
-                smallest_distance = distance
-                matched_id = pid
-
-
-        # NEW PERSON
-
-        if matched_id is None:
-
-            matched_id = next_id
-            next_id += 1
-
-
-            people[matched_id] = {
-                "center": center,
-                "name": None,
-                "confidence": 0,
-                "missing": 0,
-                "recognized": False
-            }
-
-
-            print(f"\nNEW PERSON DETECTED → ID {matched_id}")
-
-        # UPDATE EXISTING PERSON
-
-        data = people[matched_id]
-
-        data["center"] = center
-        data["missing"] = 0
-
-        current_ids.add(matched_id)
-
-        # ONLY RECOGNIZE NEW PEOPLE
-
-        if not data["recognized"]:
-
-            person_crop = frame[
-                max(0, y1):min(frame.shape[0], y2),
-                max(0, x1):min(frame.shape[1], x2)
-            ]
-
-
-            if person_crop.size > 0:
-
-                gray = cv2.cvtColor(
-                    person_crop,
-                    cv2.COLOR_BGR2GRAY
-                )
-
-                faces = face_detector.detectMultiScale(
-                    gray,
-                    scaleFactor=1.1,
-                    minNeighbors=5,
-                    minSize=(60, 60)
-                )
-
-                if len(faces) > 0:
-
-                    # Largest face
-                    fx, fy, fw, fh = max(
-                        faces,
-                        key=lambda f: f[2] * f[3]
-                    )
-
-
-                    face_crop = person_crop[
-                        fy:fy + fh,
-                        fx:fx + fw
-                    ]
-
-
-                    print(f"Running DeepFace for ID {matched_id}...")
-
-
-                    name, confidence = recognize_face(face_crop)
-
-
-                    data["name"] = name
-                    data["confidence"] = confidence
-
-                    # IMPORTANT
-                    # Once recognized, LOCK this person.
-
-                    data["recognized"] = True
-
-
-                    print(f"ID {matched_id} → {name}")
-
-        # DRAW PERSON BOX
-
-        cv2.rectangle(
-            frame,
-            (x1, y1),
-            (x2, y2),
-            (255, 0, 0),
-            2
-        )
-
-        # LABEL
-
-        if data["name"] is None:
-            label = "Analyzing..."
-
-        elif data["name"] == "Unknown":
-            label = "Unknown"
-
-        else:
-            label = (
-                f"{data['name']} "
-                f"{data['confidence']:.0f}%"
-            )
-
-
-        cv2.putText(
-            frame,
-            label,
-            (x1, max(30, y1 - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            (0, 255, 0),
-            2
-        )
-    # HANDLE PEOPLE WHO LEFT
-
-    for pid in list(people.keys()):
-
-        if pid not in current_ids:
-
-            people[pid]["missing"] += 1
-
-
-            if people[pid]["missing"] > MAX_MISSING_FRAMES:
-
-                print(f"Person ID {pid} LEFT")
-
-                del people[pid]
-
-
-    # DISPLAY
-    cv2.imshow("Sparky Vision",frame)
-    if cv2.waitKey(1) & 0xFF == ord("q"):
-        break
-
-cap.release()
-cv2.destroyAllWindows()
+def start_vision_thread():
+    """Call this from another script to run vision detection in the background."""
+    t = threading.Thread(target=run_vision, args=(display,), daemon=True)
+    t.start()
+    return t
+if __name__ == "__main__":
+    run_vision()
