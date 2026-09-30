@@ -1,0 +1,262 @@
+{
+  "version": "1.0",
+  "robot": "Sparky",
+
+  "commands": {
+    "LIGHT_ON": {
+      "description": "Turn a light on.",
+      "category": "home_automation",
+      "parameters": {
+        "location": {
+          "type": "string",
+          "required": false,
+          "description": "The room or location where the light should be turned on."
+        }
+      },
+      "examples": [
+        "turn on the lights",
+        "switch the light on",
+        "turn the bedroom light on",
+        "lights on",
+        "can you turn on the lamp"
+      ]
+    },
+
+    "LIGHT_OFF": {
+      "description": "Turn a light off.",
+      "category": "home_automation",
+      "parameters": {
+        "location": {
+          "type": "string",
+          "required": false,
+          "description": "The room or location where the light should be turned off."
+        }
+      },
+      "examples": [
+        "turn off the lights",
+        "switch the light off",
+        "turn the bedroom light off",
+        "lights off",
+        "can you turn off the lamp"
+      ]
+    },
+
+    "FAN_ON": {
+      "description": "Turn a fan on.",
+      "category": "home_automation",
+      "parameters": {
+        "location": {
+          "type": "string",
+          "required": false,
+          "description": "The room or location of the fan."
+        }
+      },
+      "examples": [
+        "turn on the fan",
+        "switch the fan on",
+        "start the fan",
+        "fan on"
+      ]
+    },
+
+    "FAN_OFF": {
+      "description": "Turn a fan off.",
+      "category": "home_automation",
+      "parameters": {
+        "location": {
+          "type": "string",
+          "required": false,
+          "description": "The room or location of the fan."
+        }
+      },
+      "examples": [
+        "turn off the fan",
+        "switch the fan off",
+        "stop the fan",
+        "fan off"
+      ]
+    },
+
+    "DETECT_OBJECT": {
+      "description": "Use the camera to detect objects in the environment.",
+      "category": "vision",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": false,
+          "description": "The specific object the user wants Sparky to look for."
+        }
+      },
+      "examples": [
+        "detect that object",
+        "what is that",
+        "identify that thing",
+        "look at that object",
+        "find the bottle",
+        "detect a person"
+      ]
+    },
+
+    "IDENTIFY_PERSON": {
+      "description": "Use face recognition to identify a person.",
+      "category": "vision",
+      "parameters": {
+        "target": {
+          "type": "string",
+          "required": false,
+          "description": "The person or face that should be identified."
+        }
+      },
+      "examples": [
+        "who is that",
+        "who is in front of you",
+        "recognize this person",
+        "identify the person",
+        "do you know who that is"
+      ]
+    },
+
+    "TAKE_PHOTO": {
+      "description": "Capture an image using the camera.",
+      "category": "vision",
+      "parameters": {},
+      "examples": [
+        "take a picture",
+        "take a photo",
+        "capture an image",
+        "take a photo of this"
+      ]
+    },
+
+    "MOVE_FORWARD": {
+      "description": "Move the robot forward.",
+      "category": "movement",
+      "parameters": {
+        "duration": {
+          "type": "number",
+          "required": false,
+          "description": "How long the robot should move forward."
+        }
+      },
+      "examples": [
+        "move forward",
+        "go forward",
+        "come forward",
+        "move ahead"
+      ]
+    },
+
+    "MOVE_BACKWARD": {
+      "description": "Move the robot backward.",
+      "category": "movement",
+      "parameters": {
+        "duration": {
+          "type": "number",
+          "required": false,
+          "description": "How long the robot should move backward."
+        }
+      },
+      "examples": [
+        "move backward",
+        "go backward",
+        "move back",
+        "reverse"
+      ]
+    },
+
+    "TURN_LEFT": {
+      "description": "Turn the robot left.",
+      "category": "movement",
+      "parameters": {},
+      "examples": [
+        "turn left",
+        "go left",
+        "move left"
+      ]
+    },
+
+    "TURN_RIGHT": {
+      "description": "Turn the robot right.",
+      "category": "movement",
+      "parameters": {},
+      "examples": [
+        "turn right",
+        "go right",
+        "move right"
+      ]
+    },
+
+    "STOP": {
+      "description": "Stop all robot movement.",
+      "category": "movement",
+      "parameters": {},
+      "examples": [
+        "stop",
+        "stop moving",
+        "halt",
+        "don't move",
+        "freeze"
+      ]
+    },
+
+    "GET_TEMPERATURE": {
+      "description": "Read the current temperature from an available temperature sensor.",
+      "category": "sensors",
+      "parameters": {},
+      "examples": [
+        "what is the temperature",
+        "tell me the temperature",
+        "how hot is it",
+        "check the temperature"
+      ]
+    },
+
+    "CHECK_DISTANCE": {
+      "description": "Measure the distance to an object using the distance sensor.",
+      "category": "sensors",
+      "parameters": {},
+      "examples": [
+        "how far is the object",
+        "check the distance",
+        "measure the distance",
+        "how close is that"
+      ]
+    },
+
+    "CHECK_LIGHT": {
+      "description": "Check the current ambient light level using the light sensor.",
+      "category": "sensors",
+      "parameters": {},
+      "examples": [
+        "is it dark",
+        "check the light level",
+        "how bright is it",
+        "is there enough light"
+      ]
+    },
+
+    "SAY": {
+      "description": "Speak a response to the user.",
+      "category": "communication",
+      "parameters": {
+        "text": {
+          "type": "string",
+          "required": true,
+          "description": "The text Sparky should say."
+        }
+      },
+      "examples": [
+        "say hello",
+        "tell me something",
+        "say that again"
+      ]
+    },
+
+    "UNKNOWN": {
+      "description": "The command does not match any supported Sparky command.",
+      "category": "system",
+      "parameters": {},
+      "examples": []
+    }
+  }
+}
