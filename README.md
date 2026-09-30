@@ -156,9 +156,6 @@ Sparky/
 ├── static/
 │   └── Static web assets
 │
-├── gen.py
-│   └── Competition presentation generator
-│
 └── .gitignore
 ```
 
@@ -335,7 +332,6 @@ pip install groq
 pip install python-dotenv
 pip install pyttsx3
 pip install SpeechRecognition
-pip install python-pptx
 ```
 
 Some features may require additional system-level dependencies.
